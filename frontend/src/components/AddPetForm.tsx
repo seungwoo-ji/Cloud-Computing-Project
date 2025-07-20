@@ -1,6 +1,9 @@
 import * as z from "zod";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useSWRConfig } from "swr";
+import { Plus, LoaderCircle } from "lucide-react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +22,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+
+const API_URL = import.meta.env.VITE_API_URL;
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -40,6 +44,8 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export function AddPetForm() {
+  const { mutate } = useSWRConfig();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -49,8 +55,38 @@ export function AddPetForm() {
     },
   });
 
-  const onSubmit: SubmitHandler<FormData> = (data) => {
-    console.log(data);
+  const onSubmit: SubmitHandler<FormData> = async (data) => {
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("name", data.name);
+      formData.append("age", data.age.toString());
+      formData.append("breed", data.breed);
+      formData.append("image", data.image);
+
+      const response = await fetch(`${API_URL}/api/pets`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to add pet");
+      }
+
+      // Close the dialog and reset form
+      form.reset();
+      const dialogClose = document.querySelector('[data-state="open"]');
+      if (dialogClose instanceof HTMLElement) {
+        dialogClose.click();
+      }
+
+      // Trigger revalidation of the pets list
+      mutate(`${API_URL}/api/pets`);
+    } catch (error) {
+      console.error("Error adding pet:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -143,8 +179,15 @@ export function AddPetForm() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full">
-              Submit
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  Adding Pet...
+                </>
+              ) : (
+                "Submit"
+              )}
             </Button>
           </form>
         </Form>
